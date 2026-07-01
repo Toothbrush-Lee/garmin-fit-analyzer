@@ -1,0 +1,36 @@
+name: Build binaries
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Build executable
+        run: uv run --group build python scripts/build_binary.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: fit-analyzer-${{ runner.os }}-${{ runner.arch }}
+          path: dist/*

@@ -1,0 +1,30 @@
+[project]
+name = "garmin-fit-analyzer"
+version = "0.1.0"
+description = "Analyze Garmin FIT activity files with Garmin's official FIT Python SDK."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "garmin-fit-sdk==21.208.0",
+    "tzdata>=2025.2",
+]
+
+[project.scripts]
+fit-analyzer = "garmin_fit_analyzer.cli:main"
+
+[dependency-groups]
+build = [
+    "pyinstaller>=6.0,<7",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.8,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
