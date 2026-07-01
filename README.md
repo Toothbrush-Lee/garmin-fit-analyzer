@@ -11,41 +11,121 @@ License: MIT
 - `*_records.csv`: 逐点记录，包含时间、GPS、距离、速度、海拔、心率等
 - `*_laps.csv`: 分圈记录
 
-## 直接运行
+## 最简单用法
 
-需要 Python 3.11+ 和 uv。
+普通用户不需要安装 Python，也不需要安装 uv。到 Releases 页面下载自己系统对应的压缩包，解压后运行 `fit-analyzer`，后面加上 FIT 文件或文件夹地址即可。
 
-```bash
-uv sync --no-editable
-uv run --no-editable fit-analyzer demo/fit --out output/demo --timezone Asia/Shanghai
-```
+下载地址：<https://github.com/Toothbrush-Lee/Garmin/releases>
 
-上面的命令会递归查找 `demo/fit` 里的所有 `.fit` 文件。批量转换时，每个 FIT 会输出到一个同名子目录，避免文件互相覆盖。
+### macOS / Linux
 
-也可以传单个文件：
+假设你把压缩包下载到了“下载”文件夹：
 
 ```bash
-uv run --no-editable fit-analyzer demo/fit/activity.fit --out output/activity
+cd ~/Downloads
+tar -xzf fit-analyzer-macOS-ARM64.tar.gz
+chmod +x ./fit-analyzer
+./fit-analyzer "/Users/你的用户名/Downloads/activity.fit"
 ```
 
-或传多个路径：
+如果你下载的是 Linux 版本，把第一行解压命令里的文件名换成：
 
 ```bash
-uv run --no-editable fit-analyzer demo/fit/activity-1.fit demo/fit/activity-2.fit --out output/two-files
+tar -xzf fit-analyzer-Linux-X64.tar.gz
 ```
 
-常用参数：
+### Windows
+
+在 PowerShell 里运行：
+
+```powershell
+cd $env:USERPROFILE\Downloads
+Expand-Archive .\fit-analyzer-Windows-X64.zip -DestinationPath .
+.\fit-analyzer.exe "C:\Users\你的用户名\Downloads\activity.fit"
+```
+
+### 不知道文件地址怎么写？
+
+先在命令行里输入程序名和一个空格：
+
+```bash
+./fit-analyzer "<把 .fit 文件拖到这里>"
+```
+
+然后把 `.fit` 文件直接拖进终端窗口，系统通常会自动填好完整路径。最后按回车即可。尖括号和里面的提示文字不用手动输入，它们只是这里的占位说明。
+
+Windows PowerShell 里对应的是：
+
+```powershell
+.\fit-analyzer.exe "<把 .fit 文件拖到这里>"
+```
+
+### 也可以转换整个文件夹
+
+如果一个文件夹里有很多 `.fit` 文件，直接把文件夹地址传进去：
+
+```bash
+./fit-analyzer "/Users/你的用户名/Downloads/fit-files"
+```
+
+Windows:
+
+```powershell
+.\fit-analyzer.exe "C:\Users\你的用户名\Downloads\fit-files"
+```
+
+程序会递归查找文件夹里的 `.fit` 文件并批量转换。
+
+### 输出文件在哪里？
+
+默认会输出到当前目录下的 `output/` 文件夹。
+
+单个 FIT 文件会生成：
+
+- `*_summary.json`: 结构化摘要
+- `*_report.md`: 人类可读报告
+- `*_records.csv`: 逐点记录，包含时间、GPS、距离、速度、海拔、心率等
+- `*_laps.csv`: 分圈记录
+
+如果一次转换多个 FIT 文件，程序会在 `output/` 下为每个 FIT 文件创建一个同名子文件夹，避免互相覆盖。
+
+想指定输出位置，可以加 `--out`：
+
+```bash
+./fit-analyzer "/Users/你的用户名/Downloads/activity.fit" --out "/Users/你的用户名/Desktop/fit-output"
+```
+
+Windows:
+
+```powershell
+.\fit-analyzer.exe "C:\Users\你的用户名\Downloads\activity.fit" --out "C:\Users\你的用户名\Desktop\fit-output"
+```
+
+### 常用参数
 
 ```text
---out <目录>          输出目录
+--out <目录>          输出目录，默认 output
 --timezone <时区>     本地时间使用的 IANA 时区，默认 Asia/Shanghai
 --raw-json           额外输出完整解码 JSON，可能包含隐私信息
 --no-recursive       输入是文件夹时，只转换该文件夹第一层的 .fit 文件
 ```
 
+如果直接运行 `fit-analyzer` 但不传文件地址，它会进入交互模式，提示你输入 FIT 文件或文件夹地址、输出目录和时区。
+
+## 从源码运行
+
+如果你是开发者，或者不想使用预构建二进制，也可以用 Python 3.11+ 和 uv 从源码运行：
+
+```bash
+uv sync --no-editable
+uv run --no-editable fit-analyzer "/Users/你的用户名/Downloads/activity.fit"
+```
+
 ## 构建二进制
 
-如果希望给不熟悉 Python 的人使用，可以用 PyInstaller 打包成独立可执行文件。
+这一节主要给开发者看。普通用户直接下载 Releases 里的压缩包即可，不需要自己构建。
+
+如果你想自己打包，可以用 PyInstaller 构建独立可执行文件：
 
 ```bash
 uv run --group build python scripts/build_binary.py
@@ -67,18 +147,18 @@ uv run --group build python scripts/build_binary.py --onedir
 - macOS/Linux: `dist/fit-analyzer/fit-analyzer`
 - Windows: `dist\fit-analyzer\fit-analyzer.exe`
 
-然后用户只需要运行可执行文件，传入 FIT 文件或文件夹即可。
+构建完成后，只需要运行可执行文件，传入 FIT 文件或文件夹即可。
 
 macOS/Linux 示例：
 
 ```bash
-dist/fit-analyzer demo/fit --out output/demo --timezone Asia/Shanghai
+dist/fit-analyzer "/Users/你的用户名/Downloads/activity.fit"
 ```
 
 Windows PowerShell 示例：
 
 ```powershell
-dist\fit-analyzer.exe demo\fit --out output\demo --timezone Asia/Shanghai
+dist\fit-analyzer.exe "C:\Users\你的用户名\Downloads\activity.fit"
 ```
 
 如果直接运行二进制但不传参数，它会进入交互模式，提示你输入 FIT 文件或文件夹路径、输出目录和时区。多个输入路径可以用 `|` 分隔。
@@ -187,7 +267,13 @@ chmod +x ./fit-analyzer
 把你自己的 `.fit` 文件放进 `demo/fit/` 后运行：
 
 ```bash
-uv run --no-editable fit-analyzer demo/fit --out output/demo --timezone Asia/Shanghai
+./fit-analyzer demo/fit --out output/demo
+```
+
+如果你是从源码运行，对应命令是：
+
+```bash
+uv run --no-editable fit-analyzer demo/fit --out output/demo
 ```
 
 ## 项目结构
