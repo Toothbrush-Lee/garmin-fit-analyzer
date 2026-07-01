@@ -111,6 +111,75 @@ tag 推送后，GitHub Actions 会生成类似下面的 Release 文件：
 - `fit-analyzer-macOS-ARM64.tar.gz` 或 `fit-analyzer-macOS-X64.tar.gz`
 - `fit-analyzer-Windows-X64.zip`
 
+## 首次运行时的系统安全提示
+
+当前 Release 里的二进制是 GitHub Actions 自动构建的开源工具，暂未做商业代码签名或 macOS notarization。因此 macOS Gatekeeper、Windows SmartScreen、浏览器或杀毒软件可能会提示“无法验证开发者”“Windows 已保护你的电脑”或“来自互联网的文件被阻止”。这是未签名小工具常见的提示，不代表文件一定有问题。
+
+建议只对你确认可信的本项目 Release 文件做一次性放行，不要关闭整机的 Gatekeeper、SmartScreen 或杀毒软件。
+
+运行前建议先确认：
+
+- 只从本仓库的 GitHub Releases 下载：<https://github.com/Toothbrush-Lee/Garmin/releases>
+- 下载的文件名和版本号符合预期，例如 `v0.1.1`。
+- 如果你不信任预构建二进制，可以直接从源码构建：`uv run --group build python scripts/build_binary.py`。
+
+### macOS
+
+解压后先尝试正常运行：
+
+```bash
+tar -xzf fit-analyzer-macOS-ARM64.tar.gz
+chmod +x ./fit-analyzer
+./fit-analyzer --help
+```
+
+如果 macOS 拦截未签名文件，可以任选一种方式只放行这个文件：
+
+1. 在 Finder 中找到 `fit-analyzer`，按住 Control 点击，选择“打开”，在确认弹窗中再次选择“打开”。
+2. 先运行一次被拦截后，打开“系统设置” -> “隐私与安全性”，在底部找到相关提示，选择“仍要打开”。
+3. 如果你确定文件来自本仓库 Release，也可以在终端移除这个文件的 quarantine 标记：
+
+```bash
+xattr -d com.apple.quarantine ./fit-analyzer
+./fit-analyzer --help
+```
+
+Apple 官方说明：<https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unidentified-developer-mh40616/mac>
+
+### Windows
+
+解压后先尝试正常运行：
+
+```powershell
+.\fit-analyzer.exe --help
+```
+
+如果 Windows SmartScreen 提示“Windows 已保护你的电脑”，确认文件来自本仓库 Release 后，可以点击“更多信息” -> “仍要运行”。
+
+如果文件属性里显示来自互联网而被阻止，可以任选一种方式只放行这个文件：
+
+1. 右键 `fit-analyzer.exe` -> “属性” -> 勾选“解除锁定” -> “应用”。
+2. 在 PowerShell 中运行：
+
+```powershell
+Unblock-File -LiteralPath .\fit-analyzer.exe
+.\fit-analyzer.exe --help
+```
+
+Microsoft 官方 `Unblock-File` 文档也提醒：使用前应先检查文件和来源，确认安全后再解除阻止。文档地址：<https://learn.microsoft.com/powershell/module/microsoft.powershell.utility/unblock-file>
+
+### Linux
+
+解压后给可执行权限即可：
+
+```bash
+tar -xzf fit-analyzer-Linux-X64.tar.gz
+chmod +x ./fit-analyzer
+./fit-analyzer --help
+```
+
+如果系统或桌面环境提示文件来自互联网，请确认下载来源后，只对这个文件选择允许运行。
+
 ## Demo 文件
 
 `demo/fit/` 是示例输入目录。出于隐私考虑，仓库不包含真实 FIT 活动文件，因为 FIT 文件通常可能包含 GPS 轨迹、设备序列号、用户资料和运动时间等信息。
