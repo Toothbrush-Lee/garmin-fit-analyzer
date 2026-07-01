@@ -10,6 +10,7 @@ import math
 import statistics
 import struct
 import sys
+import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -22,6 +23,17 @@ from garmin_fit_sdk import Decoder, Stream
 
 SEMICIRCLES = 2**31
 KMH_PER_MPS = 3.6
+GPX_NS = "http://www.topografix.com/GPX/1/1"
+GPX_TPX_NS = "http://www.garmin.com/xmlschemas/TrackPointExtension/v1"
+XSI_NS = "http://www.w3.org/2001/XMLSchema-instance"
+GPX_SCHEMA_LOCATION = (
+    "http://www.topografix.com/GPX/1/1 "
+    "http://www.topografix.com/GPX/1/1/gpx.xsd"
+)
+
+ET.register_namespace("", GPX_NS)
+ET.register_namespace("gpxtpx", GPX_TPX_NS)
+ET.register_namespace("xsi", XSI_NS)
 
 
 @dataclass(frozen=True)
@@ -32,6 +44,7 @@ class ConversionResult:
     report_path: Path
     records_path: Path
     laps_path: Path
+    gpx_path: Path
     raw_path: Path | None = None
 
 
@@ -39,6 +52,41 @@ def semicircles_to_degrees(value: Any) -> float | None:
     if value is None:
         return None
     return float(value) * 180.0 / SEMICIRCLES
+
+
+def semicircles_to_gpx_degrees(value: Any) -> str | None:
+    if value is None:
+        return None
+    # The FIT coordinate unit is semicircles. This keeps the decimal exact instead
+    # of rounding through a Python float before writing GPX.
+    scaled = int(value) * 180 * 5**31
+    sign = "-" if scaled < 0 else ""
+    scaled = abs(scaled)
+    decimal_scale = 10**31
+    text = (
+        f"{sign}{scaled // decimal_scale}.{scaled % decimal_scale:031d}"
+        .rstrip("0")
+        .rstrip(".")
+    )
+    return "0" if text == "-0" else text
+
+
+def format_gpx_number(value: Any, max_digits: int = 6) -> str | None:
+    if not isinstance(value, (int, float)):
+        return None
+    if isinstance(value, float) and math.isnan(value):
+        return None
+    text = f"{float(value):.{max_digits}f}".rstrip("0").rstrip(".")
+    return "0" if text == "-0" else text
+
+
+def format_gpx_time(value: Any) -> str | None:
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    value = value.astimezone(timezone.utc)
+    return value.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 
 
 def clean_value(value: Any) -> Any:
@@ -409,6 +457,93 @@ def write_csv(path: Path, rows: list[dict[str, Any]], fieldnames: list[str] | No
             writer.writerow({key: clean_value(row.get(key)) for key in fieldnames})
 
 
+def gpx_tag(name: str) -> str:
+    return f"{{{GPX_NS}}}{name}"
+
+
+def gpx_tpx_tag(name: str) -> str:
+    return f"{{{GPX_TPX_NS}}}{name}"
+
+
+def write_gpx(
+    path: Path,
+    fit_path: Path,
+    messages: dict[str, list[dict[str, Any]]],
+) -> None:
+    session = (messages.get("session_mesgs") or [{}])[0]
+    sport = (messages.get("sport_mesgs") or [{}])[0]
+    records = messages.get("record_mesgs") or []
+    first_record_time = next(
+        (
+            record.get("timestamp")
+            for record in records
+            if isinstance(record.get("timestamp"), datetime)
+        ),
+        None,
+    )
+
+    activity_name = (
+        session.get("sport_profile_name")
+        or sport.get("name")
+        or session.get("sport")
+        or fit_path.stem
+    )
+    activity_type = session.get("sport") or sport.get("sport")
+    metadata_time = (
+        session.get("start_time")
+        or session.get("timestamp")
+        or first_record_time
+    )
+
+    root = ET.Element(
+        gpx_tag("gpx"),
+        {
+            "creator": "Garmin FIT Analyzer",
+            "version": "1.1",
+            f"{{{XSI_NS}}}schemaLocation": GPX_SCHEMA_LOCATION,
+        },
+    )
+    metadata = ET.SubElement(root, gpx_tag("metadata"))
+    link = ET.SubElement(
+        metadata,
+        gpx_tag("link"),
+        {"href": "https://github.com/Toothbrush-Lee/Garmin"},
+    )
+    ET.SubElement(link, gpx_tag("text")).text = "Garmin FIT Analyzer"
+    if (time_text := format_gpx_time(metadata_time)) is not None:
+        ET.SubElement(metadata, gpx_tag("time")).text = time_text
+
+    track = ET.SubElement(root, gpx_tag("trk"))
+    ET.SubElement(track, gpx_tag("name")).text = str(activity_name)
+    if activity_type:
+        ET.SubElement(track, gpx_tag("type")).text = str(activity_type)
+    segment = ET.SubElement(track, gpx_tag("trkseg"))
+
+    for record in records:
+        lat = semicircles_to_gpx_degrees(record.get("position_lat"))
+        lon = semicircles_to_gpx_degrees(record.get("position_long"))
+        if lat is None or lon is None:
+            continue
+
+        point = ET.SubElement(segment, gpx_tag("trkpt"), {"lat": lat, "lon": lon})
+        if (ele := format_gpx_number(record.get("enhanced_altitude"))) is not None:
+            ET.SubElement(point, gpx_tag("ele")).text = ele
+        if (time_text := format_gpx_time(record.get("timestamp"))) is not None:
+            ET.SubElement(point, gpx_tag("time")).text = time_text
+
+        heart_rate = record.get("heart_rate")
+        if isinstance(heart_rate, (int, float)) and not (
+            isinstance(heart_rate, float) and math.isnan(heart_rate)
+        ):
+            extensions = ET.SubElement(point, gpx_tag("extensions"))
+            track_point_extension = ET.SubElement(extensions, gpx_tpx_tag("TrackPointExtension"))
+            ET.SubElement(track_point_extension, gpx_tpx_tag("hr")).text = str(int(heart_rate))
+
+    tree = ET.ElementTree(root)
+    ET.indent(tree, space="  ")
+    tree.write(path, encoding="utf-8", xml_declaration=True, short_empty_elements=False)
+
+
 def format_number(value: Any, digits: int = 2, suffix: str = "") -> str:
     if value is None:
         return "n/a"
@@ -572,6 +707,7 @@ def convert_fit_file(
     report_path = out_dir / f"{stem}_report.md"
     records_path = out_dir / f"{stem}_records.csv"
     laps_path = out_dir / f"{stem}_laps.csv"
+    gpx_path = out_dir / f"{stem}.gpx"
 
     summary_path.write_text(
         json.dumps(clean_value(summary), ensure_ascii=False, indent=2) + "\n",
@@ -587,6 +723,7 @@ def convert_fit_file(
     )
     write_csv(records_path, record_rows, record_fieldnames)
     write_csv(laps_path, summary["laps"])
+    write_gpx(gpx_path, fit_path, messages)
 
     raw_path = None
     if raw_json:
@@ -603,13 +740,14 @@ def convert_fit_file(
         report_path=report_path,
         records_path=records_path,
         laps_path=laps_path,
+        gpx_path=gpx_path,
         raw_path=raw_path,
     )
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Batch-convert Garmin FIT activity files to JSON, Markdown, and CSV."
+        description="Batch-convert Garmin FIT activity files to JSON, Markdown, CSV, and GPX."
     )
     parser.add_argument(
         "inputs",
@@ -683,7 +821,9 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     tz = ZoneInfo(args.timezone)
     fit_files = discover_fit_files(args.inputs, recursive=not args.no_recursive)
-    batch_mode = len(fit_files) > 1 or any(path.expanduser().resolve().is_dir() for path in args.inputs)
+    batch_mode = len(fit_files) > 1 or any(
+        path.expanduser().resolve().is_dir() for path in args.inputs
+    )
 
     print(f"Found {len(fit_files)} FIT file(s).")
     failures: list[tuple[Path, Exception]] = []
@@ -706,6 +846,7 @@ def main() -> None:
         print(f"  Wrote {result.report_path}")
         print(f"  Wrote {result.records_path}")
         print(f"  Wrote {result.laps_path}")
+        print(f"  Wrote {result.gpx_path}")
         if result.raw_path:
             print(f"  Wrote {result.raw_path}")
 

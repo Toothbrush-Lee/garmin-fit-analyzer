@@ -10,6 +10,7 @@ License: MIT
 - `*_report.md`: 人类可读报告
 - `*_records.csv`: 逐点记录，包含时间、GPS、距离、速度、海拔、心率等
 - `*_laps.csv`: 分圈记录
+- `*.gpx`: 标准 GPX 轨迹文件，可导入地图软件或其他运动平台
 
 ## 最简单用法
 
@@ -86,6 +87,7 @@ Windows:
 - `*_report.md`: 人类可读报告
 - `*_records.csv`: 逐点记录，包含时间、GPS、距离、速度、海拔、心率等
 - `*_laps.csv`: 分圈记录
+- `*.gpx`: 标准 GPX 轨迹文件，包含经纬度、海拔、时间和心率扩展
 
 如果一次转换多个 FIT 文件，程序会在 `output/` 下为每个 FIT 文件创建一个同名子文件夹，避免互相覆盖。
 
@@ -200,7 +202,7 @@ tag 推送后，GitHub Actions 会生成类似下面的 Release 文件：
 运行前建议先确认：
 
 - 只从本仓库的 GitHub Releases 下载：<https://github.com/Toothbrush-Lee/Garmin/releases>
-- 下载的文件名和版本号符合预期，例如 `v0.1.1`。
+- 下载的文件名和版本号符合预期，例如 `v0.2.0`。
 - 如果你不信任预构建二进制，可以直接从源码构建：`uv run --group build python scripts/build_binary.py`。
 
 ### macOS
